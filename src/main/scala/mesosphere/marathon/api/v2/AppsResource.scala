@@ -116,7 +116,7 @@ class AppsResource @Inject() (
     )
 
     def transitiveApps(groupId: PathId): Response = {
-      result(groupManager.group(groupId)) match {
+      groupManager.group(groupId) match {
         case Some(group) =>
           checkAuthorization(ViewGroup, group)
           val appsWithTasks = result(appInfoService.selectAppsInGroup(groupId, authzSelector, resolvedEmbed))

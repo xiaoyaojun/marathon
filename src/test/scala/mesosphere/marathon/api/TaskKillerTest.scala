@@ -27,7 +27,7 @@ class TaskKillerTest extends UnitTest {
       val f = new Fixture
       val appId = PathId("invalid")
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(Seq.empty))
-      when(f.groupManager.runSpec(appId)).thenReturn(Future.successful(Some(AppDefinition(appId))))
+      when(f.groupManager.runSpec(appId)).thenReturn(Some(AppDefinition(appId)))
 
       val result = f.taskKiller.kill(appId, (tasks) => Seq.empty[Instance]).futureValue
       result.isEmpty shouldEqual true
@@ -37,7 +37,7 @@ class TaskKillerTest extends UnitTest {
       val f = new Fixture
       val appId = PathId("invalid")
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(Seq.empty))
-      when(f.groupManager.runSpec(appId)).thenReturn(Future.successful(None))
+      when(f.groupManager.runSpec(appId)).thenReturn(None)
 
       val result = f.taskKiller.kill(appId, (tasks) => Seq.empty[Instance])
       result.failed.futureValue shouldEqual PathNotFoundException(appId)
@@ -62,7 +62,7 @@ class TaskKillerTest extends UnitTest {
 
       when(f.tracker.instancesBySpec()).thenReturn(Future.successful(InstancesBySpec.forInstances(tasksToKill: _*)))
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(tasksToKill))
-      when(f.groupManager.group(appId.parent)).thenReturn(Future.successful(Some(Group.empty(appId.parent))))
+      when(f.groupManager.group(appId.parent)).thenReturn(Some(Group.empty(appId.parent)))
 
       val groupUpdateCaptor = ArgumentCaptor.forClass(classOf[(RootGroup) => RootGroup])
       val forceCaptor = ArgumentCaptor.forClass(classOf[Boolean])
@@ -86,7 +86,7 @@ class TaskKillerTest extends UnitTest {
       val appId = PathId(List("my", "app"))
       val instance = TestInstanceBuilder.newBuilder(appId).addTaskRunning().getInstance()
       val tasksToKill = Seq(instance)
-      when(f.groupManager.runSpec(appId)).thenReturn(Future.successful(Some(AppDefinition(appId))))
+      when(f.groupManager.runSpec(appId)).thenReturn(Some(AppDefinition(appId)))
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(tasksToKill))
 
       val result = f.taskKiller.kill(appId, { tasks =>
@@ -107,7 +107,7 @@ class TaskKillerTest extends UnitTest {
 
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(tasksToKill))
       when(f.tracker.instancesBySpec()).thenReturn(Future.successful(InstancesBySpec.forInstances(tasksToKill: _*)))
-      when(f.groupManager.group(appId.parent)).thenReturn(Future.successful(Some(Group.empty(appId.parent))))
+      when(f.groupManager.group(appId.parent)).thenReturn(Some(Group.empty(appId.parent)))
       val groupUpdateCaptor = ArgumentCaptor.forClass(classOf[(RootGroup) => RootGroup])
       val forceCaptor = ArgumentCaptor.forClass(classOf[Boolean])
       when(f.groupManager.updateRoot(
@@ -132,7 +132,7 @@ class TaskKillerTest extends UnitTest {
       val expungeRunning = InstanceUpdateOperation.ForceExpunge(runningInstance.instanceId)
       val expungeReserved = InstanceUpdateOperation.ForceExpunge(reservedInstance.instanceId)
 
-      when(f.groupManager.runSpec(appId)).thenReturn(Future.successful(Some(AppDefinition(appId))))
+      when(f.groupManager.runSpec(appId)).thenReturn(Some(AppDefinition(appId)))
       when(f.tracker.specInstances(appId)).thenReturn(Future.successful(instancesToKill))
       when(f.stateOpProcessor.process(expungeRunning)).thenReturn(Future.successful(InstanceUpdateEffect.Expunge(runningInstance, events = Nil)))
       when(f.stateOpProcessor.process(expungeReserved)).thenReturn(Future.successful(InstanceUpdateEffect.Expunge(reservedInstance, events = Nil)))

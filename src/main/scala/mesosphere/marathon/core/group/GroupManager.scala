@@ -19,14 +19,14 @@ import scala.collection.immutable.Seq
   */
 trait GroupManager {
 
-  def rootGroup(): Future[RootGroup]
+  def rootGroup(): RootGroup
 
   /**
     * Get all available versions for given group identifier.
     * @param id the identifier of the group.
     * @return the list of versions of this object.
     */
-  def versions(id: PathId): Future[Seq[Timestamp]]
+  def versions(id: PathId): Source[Timestamp, NotUsed]
 
   /**
     * Get all available app versions for a given app id
@@ -53,7 +53,7 @@ trait GroupManager {
     * @param id the id of the group.
     * @return the group if it is found, otherwise None
     */
-  def group(id: PathId): Future[Option[Group]]
+  def group(id: PathId): Option[Group]
 
   /**
     * Get a specific group with a specific version.
@@ -68,21 +68,21 @@ trait GroupManager {
     * @param id The id of the runSpec
     * @return The run spec if it is found, otherwise none.
     */
-  def runSpec(id: PathId): Future[Option[RunSpec]]
+  def runSpec(id: PathId): Option[RunSpec]
 
   /**
     * Get a specific app definition by its id.
     * @param id the id of the app.
     * @return the app if it is found, otherwise false
     */
-  def app(id: PathId): Future[Option[AppDefinition]]
+  def app(id: PathId): Option[AppDefinition]
 
   /**
     * Get a specific pod definition by its id.
     * @param id the id of the pod.
     * @return the pod if it is found, otherwise false
     */
-  def pod(id: PathId): Future[Option[PodDefinition]]
+  def pod(id: PathId): Option[PodDefinition]
 
   /**
     * Update a group with given identifier.
@@ -119,13 +119,26 @@ trait GroupManager {
     fn: Option[AppDefinition] => AppDefinition,
     version: Timestamp = Timestamp.now(),
     force: Boolean = false,
-    toKill: Seq[Instance] = Seq.empty): Future[DeploymentPlan]
+    toKill: Seq[Instance] = Seq.empty): Future[DeploymentPlan] =
+    updateRoot(_.updateApp(appId, fn, version), version, force, Map(appId -> toKill))
 
+  /**
+    * Update pod with given identifier and update function.
+    * The change could take time to get deployed.
+    * For this reason, we return the DeploymentPlan as result, which can be queried in the marathon scheduler.
+    *
+    * @param podId the identifier of the pod
+    * @param fn the pod change function
+    * @param version the version of the change
+    * @param force if the change has to be forced.
+    * @return the deployment plan which will be executed.
+    */
   def updatePod(
     podId: PathId,
     fn: Option[PodDefinition] => PodDefinition,
     version: Timestamp = Timestamp.now(),
     force: Boolean = false,
     toKill: Seq[Instance] = Seq.empty
-  ): Future[DeploymentPlan]
+  ): Future[DeploymentPlan] = updateRoot(_.updatePod(podId, fn, version), version, force, Map(podId -> toKill))
+
 }
