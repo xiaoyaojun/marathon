@@ -7,7 +7,6 @@ import javax.inject.Provider
 
 import akka.NotUsed
 import akka.event.EventStream
-import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.StrictLogging
 import mesosphere.marathon.api.v2.Validation
@@ -34,7 +33,7 @@ class GroupManagerImpl(
     initialRoot: RootGroup,
     groupRepository: GroupRepository,
     deploymentService: Provider[DeploymentService],
-    storage: StorageProvider)(implicit eventStream: EventStream, ctx: ExecutionContext, mat: Materializer) extends GroupManager with StrictLogging {
+    storage: StorageProvider)(implicit eventStream: EventStream, ctx: ExecutionContext) extends GroupManager with StrictLogging {
   private[this] val serializeUpdates: WorkQueue = WorkQueue(
     "GroupManager",
     maxConcurrent = 1, maxQueueLength = config.internalMaxQueuedRootGroupUpdates())
@@ -66,6 +65,7 @@ class GroupManagerImpl(
 
   override def group(id: PathId): Option[Group] = rootGroup().group(id)
 
+  @SuppressWarnings(Array("all")) /* async/await */
   override def group(id: PathId, version: Timestamp): Future[Option[Group]] = async {
     val root = await(groupRepository.rootVersion(version.toOffsetDateTime))
     root.flatMap(_.group(id))
@@ -77,6 +77,7 @@ class GroupManagerImpl(
 
   override def pod(id: PathId): Option[PodDefinition] = rootGroup().pod(id)
 
+  @SuppressWarnings(Array("all")) /* async/await */
   override def updateRoot(change: (RootGroup) => RootGroup, version: Timestamp, force: Boolean, toKill: Map[PathId, Seq[Instance]]): Future[DeploymentPlan] = {
     val deployment = serializeUpdates {
       async {

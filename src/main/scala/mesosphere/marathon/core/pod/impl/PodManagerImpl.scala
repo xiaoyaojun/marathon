@@ -10,9 +10,9 @@ import mesosphere.marathon.stream._
 import mesosphere.marathon.upgrade.DeploymentPlan
 
 import scala.collection.immutable.Seq
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.Future
 
-case class PodManagerImpl(groupManager: GroupManager)(implicit ctx: ExecutionContext) extends PodManager {
+case class PodManagerImpl(groupManager: GroupManager) extends PodManager {
 
   override def ids(): Set[PathId] = groupManager.rootGroup().transitivePodsById.keySet
 

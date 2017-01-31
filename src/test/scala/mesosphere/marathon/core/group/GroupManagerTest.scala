@@ -20,7 +20,7 @@ import scala.concurrent.{ ExecutionContext, Future, Promise }
 
 class GroupManagerTest extends AkkaUnitTest with GroupCreation {
   class Fixture(
-    val servicePortsRange: Range = 1000.until(20000),
+      val servicePortsRange: Range = 1000.until(20000),
       val initialRoot: RootGroup = RootGroup.empty) {
     val config = AllConf.withTestConfig("--local_port_min", servicePortsRange.start.toString, "--local_port_max", (servicePortsRange.end + 1).toString)
     val groupRepository = mock[GroupRepository]
@@ -29,7 +29,7 @@ class GroupManagerTest extends AkkaUnitTest with GroupCreation {
     val eventStream = mock[EventStream]
     val groupManager = new GroupManagerImpl(config, initialRoot, groupRepository, new Provider[DeploymentService] {
       override def get(): DeploymentService = deploymentService
-    }, storage)(eventStream, ExecutionContext.global, mat)
+    }, storage)(eventStream, ExecutionContext.global)
   }
   "GroupManager" should {
     "Assign dynamic app ports" in new Fixture(10.to(20)) {

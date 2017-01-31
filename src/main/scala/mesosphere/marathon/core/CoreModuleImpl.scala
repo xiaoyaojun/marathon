@@ -186,15 +186,14 @@ class CoreModuleImpl @Inject() (
 
   override lazy val groupManagerModule: GroupManagerModule = new GroupManagerModule(
     marathonConf,
-    leadershipModule,
     scheduler,
     storageModule.groupRepository,
     storage,
-    metrics)(actorsModule.materializer, ExecutionContext.global, eventStream)
+    metrics)(ExecutionContext.global, eventStream)
 
   // PODS
 
-  override lazy val podModule: PodModule = PodModule(groupManagerModule.groupManager)(ExecutionContext.global)
+  override lazy val podModule: PodModule = PodModule(groupManagerModule.groupManager)
 
   // GREEDY INSTANTIATION
   //

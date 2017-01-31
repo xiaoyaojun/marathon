@@ -8,7 +8,6 @@ import akka.event.EventStream
 import com.codahale.metrics.MetricRegistry
 import mesosphere.AkkaTest
 import mesosphere.marathon.core.group.GroupManagerModule
-import mesosphere.marathon.core.leadership.AlwaysElectedLeadershipModule
 import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.RootGroup
@@ -38,11 +37,10 @@ class TestGroupManagerFixture(initialRoot: RootGroup = RootGroup.empty) extends 
 
   private[this] val groupManagerModule = new GroupManagerModule(
     config = config,
-    AlwaysElectedLeadershipModule.forActorSystem(system),
     scheduler = schedulerProvider,
     groupRepo = groupRepository,
     storage = provider,
-    metrics = metrics)(mat, ExecutionContext.global, eventBus)
+    metrics = metrics)(ExecutionContext.global, eventBus)
 
   val groupManager = groupManagerModule.groupManager
 }
