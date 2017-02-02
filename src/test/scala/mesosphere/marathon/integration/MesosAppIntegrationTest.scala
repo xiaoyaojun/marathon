@@ -61,7 +61,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       val result = marathon.createAppV2(app)
 
       Then("The app is created")
-      result.code should be(201) // Created
+      result.code should be(201) withClue s"Response: ${result.entityString}" // Created
       extractDeploymentIds(result) should have size 1
       waitForDeployment(result)
       waitForTasks(app.id, 1) // The app has really started
@@ -80,7 +80,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       val result = marathon.createAppV2(app)
 
       Then("The app is created")
-      result.code should be(201) // Created
+      result.code should be(201) withClue s"Response: ${result.entityString}" // Created
       extractDeploymentIds(result) should have size 1
       waitForDeployment(result)
       waitForTasks(app.id, 1) // The app has really started
@@ -94,7 +94,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       val createResult = marathon.createPodV2(pod)
 
       Then("The pod is created")
-      createResult.code should be(201) // Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" // Created
       waitForDeployment(createResult)
       waitForPod(pod.id)
 
@@ -169,7 +169,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       val createResult = marathon.createPodV2(pod)
 
       Then("The pod is created")
-      createResult.code should be(201) //Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" //Created
       // The timeout is 5 minutes because downloading and provisioning the Python image can take some time.
       waitForDeployment(createResult, 300.seconds)
       waitForPod(podId)
@@ -211,7 +211,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       val createResult = marathon.createPodV2(pod)
 
       Then("The pod is created")
-      createResult.code should be(201) // Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" // Created
       waitForDeployment(createResult)
       waitForPod(pod.id)
     }
@@ -220,7 +220,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       Given("a deployed pod")
       val pod = simplePod("simplepod")
       val createResult = marathon.createPodV2(pod)
-      createResult.code should be(201) //Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" //Created
       waitForDeployment(createResult)
       waitForPod(pod.id)
       marathon.listPodsInBaseGroup.value should have size 1
@@ -242,7 +242,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       Given("a new pod")
       val pod = simplePod("simplepod")
       val createResult = marathon.createPodV2(pod)
-      createResult.code should be(201) //Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" //Created
       waitForDeployment(createResult)
       waitForPod(pod.id)
 
@@ -296,8 +296,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       )
 
       val createResult = marathon.createPodV2(pod)
-      createResult.code should be(201)
-      //Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" //Created
       val deploymentId = createResult.originalResponse.headers.find(_.name == "Marathon-Deployment-Id").map(_.value)
       deploymentId shouldBe defined
 
@@ -326,8 +325,7 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
       )
 
       val createResult = marathon.createPodV2(pod)
-      createResult.code should be(201)
-      //Created
+      createResult.code should be(201) withClue s"Response: ${createResult.entityString}" //Created
       val deploymentId = createResult.originalResponse.headers.find(_.name == "Marathon-Deployment-Id").map(_.value)
       deploymentId shouldBe defined
 
