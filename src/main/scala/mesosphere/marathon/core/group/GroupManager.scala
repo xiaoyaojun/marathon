@@ -16,6 +16,8 @@ import scala.collection.immutable.Seq
 /**
   * The group manager is the facade for all group related actions.
   * It persists the state of a group and initiates deployments.
+  *
+  * Only 1 update to the root will be processed at a time.
   */
 trait GroupManager {
 
@@ -91,6 +93,12 @@ trait GroupManager {
     * The change could take time to get deployed.
     * For this reason, we return the DeploymentPlan as result, which can be queried in the marathon scheduler.
     *
+    * Only a single updateRoot call will be processed at a time and the root will be updated once the plan
+    * starts getting processed.
+    *
+    * @param id The id of the group being edited (for event publishing purposes). This should be the
+    *           finest grained group being edited, for example, if app "/a/b/c/d" is being edited,
+    *           the id should be "/a/b/c"
     * @param fn the update function, which is applied to the root group
     * @param version the new version of the group, after the change has applied.
     * @param force only one update can be applied to applications at a time. with this flag
@@ -98,6 +106,7 @@ trait GroupManager {
     * @return the deployment plan which will be executed.
     */
   def updateRoot(
+    id: PathId,
     fn: RootGroup => RootGroup,
     version: Timestamp = Timestamp.now(),
     force: Boolean = false,
@@ -120,7 +129,7 @@ trait GroupManager {
     version: Timestamp = Timestamp.now(),
     force: Boolean = false,
     toKill: Seq[Instance] = Seq.empty): Future[DeploymentPlan] =
-    updateRoot(_.updateApp(appId, fn, version), version, force, Map(appId -> toKill))
+    updateRoot(appId.parent, _.updateApp(appId, fn, version), version, force, Map(appId -> toKill))
 
   /**
     * Update pod with given identifier and update function.
@@ -139,6 +148,6 @@ trait GroupManager {
     version: Timestamp = Timestamp.now(),
     force: Boolean = false,
     toKill: Seq[Instance] = Seq.empty
-  ): Future[DeploymentPlan] = updateRoot(_.updatePod(podId, fn, version), version, force, Map(podId -> toKill))
+  ): Future[DeploymentPlan] = updateRoot(podId.parent, _.updatePod(podId, fn, version), version, force, Map(podId -> toKill))
 
 }

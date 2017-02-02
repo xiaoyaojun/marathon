@@ -33,7 +33,7 @@ case class PodManagerImpl(groupManager: GroupManager) extends PodManager {
     groupManager.updatePod(p.id, _ => p, p.version, force)
 
   def delete(id: PathId, force: Boolean): Future[DeploymentPlan] = {
-    groupManager.updateRoot(_.removePod(id), force = force)
+    groupManager.updateRoot(id.parent, _.removePod(id), force = force)
   }
 
   override def versions(id: PathId): Source[Timestamp, NotUsed] = groupManager.podVersions(id).map(Timestamp(_))

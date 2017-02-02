@@ -219,7 +219,7 @@ class GroupsResource @Inject() (
       RootGroup(version = version)
     }
 
-    val deployment = result(groupManager.updateRoot(clearRootGroup, version, force))
+    val deployment = result(groupManager.updateRoot(PathId.empty, clearRootGroup, version, force))
     deploymentResult(deployment)
   }
 
@@ -247,7 +247,7 @@ class GroupsResource @Inject() (
       rootGroup.removeGroup(groupId, version)
     }
 
-    val deployment = result(groupManager.updateRoot(deleteGroup, version, force))
+    val deployment = result(groupManager.updateRoot(groupId.parent, deleteGroup, version, force))
     deploymentResult(deployment)
   }
 
@@ -292,7 +292,7 @@ class GroupsResource @Inject() (
     val version = Timestamp.now()
 
     val effectivePath = update.id.map(_.canonicalPath(id)).getOrElse(id)
-    val deployment = result(groupManager.updateRoot(applyGroupUpdate(_, effectivePath, update, version), version, force))
+    val deployment = result(groupManager.updateRoot(id.parent, applyGroupUpdate(_, effectivePath, update, version), version, force))
     (deployment, effectivePath)
   }
 

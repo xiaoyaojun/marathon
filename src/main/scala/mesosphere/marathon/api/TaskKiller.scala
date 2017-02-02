@@ -97,6 +97,7 @@ class TaskKiller @Inject() (
     val version = Timestamp.now()
 
     def killTasks = groupManager.updateRoot(
+      PathId.empty,
       _.updateTransitiveApps(PathId.empty, scaleApp, version),
       version = version,
       force = force,

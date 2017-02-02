@@ -249,7 +249,7 @@ class GroupManagerTest extends AkkaUnitTest with GroupCreation {
       groupRepository.root() returns Future.successful(createRootGroup())
 
       intercept[ValidationFailedException] {
-        throw groupManager.updateRoot(_.putGroup(rootGroup, rootGroup.version), rootGroup.version, force = false).failed.futureValue
+        throw groupManager.updateRoot(PathId.empty, _.putGroup(rootGroup, rootGroup.version), rootGroup.version, force = false).failed.futureValue
       }
 
       verify(groupRepository, times(0)).storeRoot(any, any, any, any, any)
@@ -283,7 +283,7 @@ class GroupManagerTest extends AkkaUnitTest with GroupCreation {
           ???
       }
 
-      groupManager.updateRoot(_.putGroup(group, version = Timestamp(1)), version = Timestamp(1), force = false).futureValue
+      groupManager.updateRoot(PathId.empty, _.putGroup(group, version = Timestamp(1)), version = Timestamp(1), force = false).futureValue
       verify(groupRepository).storeRoot(groupWithVersionInfo, Seq(appWithVersionInfo), Nil, Nil, Nil)
       verify(groupRepository).storeRootVersion(groupWithVersionInfo, Seq(appWithVersionInfo), Nil)
 
@@ -302,7 +302,7 @@ class GroupManagerTest extends AkkaUnitTest with GroupCreation {
       groupRepository.storeRootVersion(any, any, any) returns Future.successful(Done)
       groupRepository.storeRoot(any, any, any, any, any) returns Future.successful(Done)
 
-      groupManager.updateRoot(_.putGroup(rootGroup, version = Timestamp(1)), version = Timestamp(1), force = false).futureValue
+      groupManager.updateRoot(PathId.empty, _.putGroup(rootGroup, version = Timestamp(1)), version = Timestamp(1), force = false).futureValue
 
       verify(groupRepository).storeRoot(groupWithVersionInfo, Seq(appWithVersionInfo), Nil, Nil, Nil)
       verify(groupRepository).storeRootVersion(groupWithVersionInfo, Seq(appWithVersionInfo), Nil)
@@ -318,7 +318,7 @@ class GroupManagerTest extends AkkaUnitTest with GroupCreation {
       groupRepository.storeRootVersion(any, any, any) returns Future.successful(Done)
       groupRepository.storeRoot(any, any, any, any, any) returns Future.successful(Done)
 
-      groupManager.updateRoot(_.putGroup(groupEmpty, version = Timestamp(1)), Timestamp(1), force = false).futureValue
+      groupManager.updateRoot(PathId.empty, _.putGroup(groupEmpty, version = Timestamp(1)), Timestamp(1), force = false).futureValue
 
       verify(groupRepository).storeRootVersion(groupEmpty, Nil, Nil)
       verify(groupRepository).storeRoot(groupEmpty, Nil, Seq("/app1".toPath), Nil, Nil)

@@ -19,7 +19,7 @@ import mesosphere.marathon.state._
 import mesosphere.marathon.storage.repository.GroupRepository
 import mesosphere.marathon.stream._
 import mesosphere.marathon.upgrade.{ DeploymentPlan, GroupVersioningUtil, ResolveArtifacts }
-import mesosphere.marathon.util.{ LockedVar, WorkQueue, toRichFuture }
+import mesosphere.marathon.util.{ LockedVar, WorkQueue }
 
 import scala.async.Async._
 import scala.collection.immutable.Seq
@@ -34,9 +34,18 @@ class GroupManagerImpl(
     groupRepository: GroupRepository,
     deploymentService: Provider[DeploymentService],
     storage: StorageProvider)(implicit eventStream: EventStream, ctx: ExecutionContext) extends GroupManager with StrictLogging {
+  /**
+    * All updates to root() should go through this workqueue and the maxConcurrent should always be "1"
+    * as we don't allow multiple updates to the root at the same time.
+    */
   private[this] val serializeUpdates: WorkQueue = WorkQueue(
     "GroupManager",
     maxConcurrent = 1, maxQueueLength = config.internalMaxQueuedRootGroupUpdates())
+  /**
+    * Lock around the root to guarantee read-after-write consistency,
+    * Even though updates go through the workqueue, we want to make sure multiple readers always read
+    * the latest version of the root. This could be solved by a @volatile too, but this is more explicit.
+    */
   private[this] val root = LockedVar(initialRoot)
 
   override def rootGroup(): RootGroup = root.get()
@@ -78,7 +87,11 @@ class GroupManagerImpl(
   override def pod(id: PathId): Option[PodDefinition] = rootGroup().pod(id)
 
   @SuppressWarnings(Array("all")) /* async/await */
-  override def updateRoot(change: (RootGroup) => RootGroup, version: Timestamp, force: Boolean, toKill: Map[PathId, Seq[Instance]]): Future[DeploymentPlan] = {
+  override def updateRoot(
+    id: PathId,
+    change: (RootGroup) => RootGroup, version: Timestamp, force: Boolean, toKill: Map[PathId, Seq[Instance]]): Future[DeploymentPlan] = {
+
+    // All updates to the root go through the work queue.
     val deployment = serializeUpdates {
       async {
         logger.info(s"Upgrade root group version:$version with force:$force")
@@ -91,23 +104,24 @@ class GroupManagerImpl(
         Validation.validateOrThrow(plan)(DeploymentPlan.deploymentPlanValidator())
         logger.info(s"Computed new deployment plan:\n$plan")
         await(groupRepository.storeRootVersion(plan.target, plan.createdOrUpdatedApps, plan.createdOrUpdatedPods))
-        val deployment = await(deploymentService.get().deploy(plan, force).asTry)
-        await(groupRepository.storeRoot(plan.target, plan.createdOrUpdatedApps, plan.deletedApps, plan.createdOrUpdatedPods, plan.deletedPods).asTry)
+        await(deploymentService.get().deploy(plan, force))
+        await(groupRepository.storeRoot(plan.target, plan.createdOrUpdatedApps, plan.deletedApps, plan.createdOrUpdatedPods, plan.deletedPods))
         logger.info(s"Updated groups/apps/pods according to plan ${plan.id}")
-        root update plan.target
+        // finally update the root under the write lock.
+        root := plan.target
         plan
       }
     }
     deployment.onComplete {
       case Success(plan) =>
         logger.info(s"Deployment acknowledged. Waiting to get processed:\n$plan")
-        eventStream.publish(GroupChangeSuccess(PathId.empty, version.toString))
+        eventStream.publish(GroupChangeSuccess(id, version.toString))
       case Failure(ex: AccessDeniedException) =>
         // If the request was not authorized, we should not publish an event
         logger.warn(s"Deployment failed for change: $version", ex)
       case Failure(NonFatal(ex)) =>
         logger.warn(s"Deployment failed for change: $version", ex)
-        eventStream.publish(GroupChangeFailed(PathId.empty, version.toString, ex.getMessage))
+        eventStream.publish(GroupChangeFailed(id, version.toString, ex.getMessage))
     }
     deployment
   }

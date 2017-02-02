@@ -69,6 +69,7 @@ class TaskKillerTest extends UnitTest {
       val toKillCaptor = ArgumentCaptor.forClass(classOf[Map[PathId, Seq[Instance]]])
       val expectedDeploymentPlan = DeploymentPlan.empty
       when(f.groupManager.updateRoot(
+        any[PathId],
         groupUpdateCaptor.capture(),
         any[Timestamp],
         forceCaptor.capture(),
@@ -111,6 +112,7 @@ class TaskKillerTest extends UnitTest {
       val groupUpdateCaptor = ArgumentCaptor.forClass(classOf[(RootGroup) => RootGroup])
       val forceCaptor = ArgumentCaptor.forClass(classOf[Boolean])
       when(f.groupManager.updateRoot(
+        any[PathId],
         groupUpdateCaptor.capture(),
         any[Timestamp],
         forceCaptor.capture(),

@@ -49,15 +49,20 @@ object Lock {
 }
 
 class LockedVar[T](initialValue: T, fair: Boolean = true) {
-  private[this] val lock = RichLock(fair)
+  private[this] val lock = RichRwLock(fair)
   private[this] var item: T = initialValue
 
-  def update(f: => T): T = lock {
+  def :=(f: => T): T = lock.write {
     item = f
     item
   }
 
-  def get(): T = lock { item }
+  def update(f: T => T): T = lock.write {
+    item = f(item)
+    item
+  }
+
+  def get(): T = lock.read { item }
 }
 
 object LockedVar {
