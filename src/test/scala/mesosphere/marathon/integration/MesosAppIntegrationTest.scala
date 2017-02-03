@@ -30,8 +30,9 @@ class MesosAppIntegrationTest extends AkkaIntegrationTest with EmbeddedMarathonT
     isolation = Some("filesystem/linux,docker/runtime"),
     imageProviders = Some("docker"))
 
+
   private[this] def simplePod(podId: String): PodDefinition = PodDefinition(
-    id = testBasePath / s"podId-${currentAppId.incrementAndGet()}",
+    id = testBasePath / s"$podId-${currentAppId.incrementAndGet()}",
     containers = Seq(
       MesosContainer(
         name = "task1",
