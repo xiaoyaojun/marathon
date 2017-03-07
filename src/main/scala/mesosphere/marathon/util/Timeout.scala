@@ -1,15 +1,15 @@
 package mesosphere.marathon
 package util
 
-import java.time.{ Clock, Instant }
+import java.time.{Clock, Instant}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.Scheduler
-import mesosphere.marathon.core.async.DeadlineContext
-import mesosphere.util.{ CallerThreadExecutionContext, DurationToHumanReadable }
+import mesosphere.marathon.core.async.RunContext
+import mesosphere.util.{CallerThreadExecutionContext, DurationToHumanReadable}
 
-import scala.concurrent.duration.{ Duration, FiniteDuration }
-import scala.concurrent.{ ExecutionContext, Future, Promise, blocking => blockingCall }
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{ExecutionContext, Future, Promise, blocking => blockingCall}
 
 /**
   * Function transformations to make a method timeout after a given duration.
@@ -51,7 +51,7 @@ object Timeout {
       val token = scheduler.scheduleOnce(finiteTimeout) {
         promise.tryFailure(new TimeoutException(s"Timed out after ${timeout.toHumanReadable}"))
       }
-      val result = DeadlineContext.withDeadline(Instant.now(clock))(f)
+      val result = RunContext.withContext(Instant.now(clock))(f)
       result.onComplete { res =>
         promise.tryComplete(res)
         token.cancel()
