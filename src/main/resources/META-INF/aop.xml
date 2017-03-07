@@ -7,6 +7,7 @@
     </aspects>
     <weaver options="-Xlint:default">
         <include within="kamon..*"/>
+        <include within="akka.dispatch.WeaveActorReceive" />
         <include within="akka.actor..*" />
         <include within="mesosphere..*"/>
         <exclude within="org.aspectj.*"/>

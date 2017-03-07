@@ -21,16 +21,7 @@ trait ContextPropagatingExecutionContext extends ExecutionContext { self =>
 
     override def execute(runnable: Runnable): Unit = self.execute(new Runnable {
       def run(): Unit = {
-        val oldMdc = Option(MDC.getCopyOfContextMap)
-
-        try {
-          // set the context for this thread
-          mdcContext.fold(MDC.clear())(MDC.setContextMap)
-          Context.withContext(context)(runnable.run())
-        } finally {
-          // restore it to the previous state
-          oldMdc.fold(MDC.clear())(MDC.setContextMap)
-        }
+        propagateContext(context, mdcContext)(runnable.run())
       }
     })
 
