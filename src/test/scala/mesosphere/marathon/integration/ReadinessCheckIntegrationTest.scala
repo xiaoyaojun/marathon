@@ -45,23 +45,23 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
     val serviceDef = serviceProxy("/upgrade".toTestPath, "phase(block1!,block2!,block3!)", withHealth = false)
     deploy(serviceDef, continue = true)
 
-      When("The service is upgraded")
-      val oldTask = marathon.tasks(serviceDef.id).value.head
-      val update = marathon.updateApp(serviceDef.id, AppUpdate(env = Some(EnvVarValue(sys.env))))
+    When("The service is upgraded")
+    val oldTask = marathon.tasks(serviceDef.id).value.head
+    val update = marathon.updateApp(serviceDef.id, AppUpdate(env = Some(EnvVarValue(sys.env))))
 
-        And("The ServiceMock is up")
-      val serviceFacade = createServiceFacade(serviceDef.id){ task =>
-        task.id != oldTask.id&& task.state == MesosProtos.TaskState.TASK_RUNNING.name()
-      }
+    And("The ServiceMock is up")
+    val serviceFacade = createServiceFacade(serviceDef.id){ task =>
+      task.id != oldTask.id && task.state == MesosProtos.TaskState.TASK_RUNNING.name()
+    }
 
-      Then("The deployment does not succeed until the readiness checks succeed")
+    Then("The deployment does not succeed until the readiness checks succeed")
 
-      while (serviceFacade.plan().code != 200) {
-        When("We continue on block until the plan is ready")
-        serviceFacade.continue()
-        marathon.listDeploymentsForBaseGroup().value should have size 1
-      }
-      waitForDeployment(update)
+    while (serviceFacade.plan().code != 200) {
+      When("We continue on block until the plan is ready")
+      serviceFacade.continue()
+      marathon.listDeploymentsForBaseGroup().value should have size 1
+    }
+    waitForDeployment(update)
 
   }
 

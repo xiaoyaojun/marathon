@@ -360,7 +360,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     val origGroup = createRootGroup(groups = Set(createGroup(PathId("/foo/bar"), Map(app.id -> app))))
     val targetGroup = createRootGroup(groups = Set(createGroup(PathId("/foo/bar"))))
 
-    val plan = DeploymentPlan("foo", origGroup, targetGroup, List(DeploymentStep(List(StopApplication(app)))), Timestamp.now())
+    val plan = DeploymentPlan("d2", origGroup, targetGroup, List(DeploymentStep(List(StopApplication(app)))), Timestamp.now())
 
     f.instanceTracker.specInstancesLaunchedSync(app.id) returns Seq(instance)
     f.instanceTracker.specInstances(mockito.Matchers.eq(app.id))(any[ExecutionContext]) returns Future.successful(Seq(instance))
@@ -394,7 +394,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     )
     val rootGroup = createRootGroup(groups = Set(createGroup(PathId("/foo/bar"), Map(app.id -> app))))
 
-    val plan = DeploymentPlan(createRootGroup(), rootGroup)
+    val plan = DeploymentPlan(createRootGroup(), rootGroup, id = Some("d3"))
 
     instanceTracker.specInstancesLaunchedSync(app.id) returns Seq.empty[Instance]
     instanceTracker.specInstances(mockito.Matchers.eq(app.id))(mockito.Matchers.any[ExecutionContext]) returns Future.successful(Seq.empty[Instance])
@@ -431,7 +431,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     )
     val rootGroup = createRootGroup(groups = Set(createGroup(PathId("/foo/bar"), Map(app.id -> app))))
 
-    val plan = DeploymentPlan(createRootGroup(), rootGroup)
+    val plan = DeploymentPlan(createRootGroup(), rootGroup, id = Some("d4"))
 
     deploymentRepo.delete(any) returns Future.successful(Done)
     deploymentRepo.all() returns Source.single(plan)
