@@ -13,6 +13,7 @@ import common
 from common import event_fixture
 from dcos import marathon
 from utils import fixture_dir, get_resource
+from datetime import timedelta
 
 PACKAGE_NAME = 'marathon'
 DCOS_SERVICE_URL = shakedown.dcos_service_url(PACKAGE_NAME)
@@ -198,7 +199,7 @@ def test_private_repository_docker_app():
     client = marathon.create_client()
     app_def = common.private_docker_container_app()
     client.add_app(app_def)
-    shakedown.deployment_wait()
+    shakedown.deployment_wait(app_id=app_def['id'], timeout=timedelta(minutes=5).total_seconds())
 
     common.assert_app_tasks_running(client, app_def)
 
