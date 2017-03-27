@@ -283,7 +283,9 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
 
   implicit val ipAddressProtoRamlWriter: Writes[Protos.ObsoleteIpAddress, IpAddress] = Writes { ip =>
     IpAddress(
-      discovery = ip.when(_.hasDiscoveryInfo, _.getDiscoveryInfo.toRaml).orElse(IpAddress.DefaultDiscovery),
+      discovery = ip.collect {
+        case x if x.hasDiscoveryInfo && x.getDiscoveryInfo.getPortsCount > 0 => x.getDiscoveryInfo.toRaml
+      }.orElse(IpAddress.DefaultDiscovery),
       groups = ip.whenOrElse(_.getGroupsCount > 0, _.getGroupsList.to[Set], IpAddress.DefaultGroups),
       labels = ip.whenOrElse(_.getLabelsCount > 0, _.getLabelsList.to[Seq].fromProto, IpAddress.DefaultLabels),
       networkName = ip.when(_.hasNetworkName, _.getNetworkName).orElse(IpAddress.DefaultNetworkName)
@@ -318,7 +320,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       ))
       else None
 
-    App(
+    val app = App(
       id = service.getId,
       acceptedResourceRoles = if (service.hasAcceptedResourceRoles && service.getAcceptedResourceRoles.getRoleCount > 0) Option(service.getAcceptedResourceRoles.getRoleList.to[Set]) else App.DefaultAcceptedResourceRoles,
       args = if (service.hasCmd && service.getCmd.getArgumentsCount > 0) service.getCmd.getArgumentsList.to[Seq] else App.DefaultArgs,
@@ -358,6 +360,20 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       killSelection = service.whenOrElse(_.hasKillSelection, _.getKillSelection.toRaml, App.DefaultKillSelection),
       unreachableStrategy = service.when(_.hasUnreachableStrategy, _.getUnreachableStrategy.toRaml).orElse(App.DefaultUnreachableStrategy)
     )
+    // special ports normalization when converting from protobuf, because the protos don't allow us to distinguish
+    // between "I specified an empty set of ports" and "I specified a null set of ports" (for definitions and mappings).
+    // note that we don't clear app.container.docker.portMappings because those may be valid in some cases: some other
+    // normalization code should deal with that.
+    (app.container, app.ipAddress) match {
+      case (ct, Some(ip)) if ct.exists(_.`type` != EngineType.Mesos) || ip.discovery.exists(_.ports.nonEmpty) =>
+        app.copy(
+          container = ct.map(_.copy(portMappings = None)),
+          portDefinitions = None,
+          requirePorts = false
+        )
+      case _ =>
+        app
+    }
   }
 
   /**
