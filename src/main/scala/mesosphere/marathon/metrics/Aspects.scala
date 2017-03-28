@@ -14,6 +14,7 @@ private object ServletTracing {
   private[metrics] val `3xx` = Kamon.metrics.counter("org.eclipse.jetty.ServletContextHandler.3xx-responses")
   private[metrics] val `4xx` = Kamon.metrics.counter("org.eclipse.jetty.ServletContextHandler.4xx-responses")
   private[metrics] val `5xx` = Kamon.metrics.counter("org.eclipse.jetty.ServletContextHandler.5xx-responses")
+  private[metrics] val `503` = Kamon.metrics.counter("org.eclipse.jetty.ServletContextHandler.503-responses")
 }
 
 /** Automatically time all servlet endpoints */
@@ -29,6 +30,10 @@ private class ServletTracing extends StrictLogging {
       case r: Response if r.getStatus < 300 => ServletTracing.`2xx`.increment()
       case r: Response if r.getStatus < 400 => ServletTracing.`3xx`.increment()
       case r: Response if r.getStatus < 500 => ServletTracing.`4xx`.increment()
+      // Since it's can happen for marathon to return HTTP 503 e.g. while leader is
+      // reelected, we track this status code separately. Otherwise it distorts
+      // the 5xx metrics which is widely seen as "marathon errors".
+      case r: Response if r.getStatus == 503 => ServletTracing.`503`.increment()
       case _ => ServletTracing.`5xx`.increment()
     }
     result
