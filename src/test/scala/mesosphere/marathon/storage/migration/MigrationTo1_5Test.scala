@@ -1,14 +1,18 @@
 package mesosphere.marathon
 package storage.migration
 
+import java.time.OffsetDateTime
+
+import akka.Done
 import akka.stream.scaladsl.{ Sink, Source }
 import mesosphere.AkkaUnitTest
-import mesosphere.marathon.api.v2.{ AppNormalization, AppsResource }
 import mesosphere.marathon.core.pod.{ BridgeNetwork, ContainerNetwork }
 import mesosphere.marathon.raml.Resources
 import mesosphere.marathon.state.VersionInfo.{ FullVersionInfo, OnlyVersion }
 import mesosphere.marathon.state._
+import mesosphere.marathon.storage.repository.GroupRepository
 import mesosphere.marathon.stream.Implicits._
+import mesosphere.marathon.test.GroupCreation
 import mesosphere.mesos.protos.Implicits._
 import mesosphere.mesos.protos.{ Range, RangesResource, ScalarResource }
 import org.apache.mesos.{ Protos => Mesos }
@@ -16,9 +20,10 @@ import org.scalatest.RecoverMethods
 
 import scala.concurrent.Future
 
-class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
+class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods with GroupCreation {
 
   import MigrationTo1_5._
+  import Protos.ExtendedContainerInfo.DockerInfo
 
   private def migrateSingleApp(sd: Protos.ServiceDefinition)(implicit n: Normalization[raml.App]): AppDefinition =
     migrateSingleAppF(sd).futureValue
@@ -27,7 +32,9 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
     Source.single(sd).via(migrateServiceFlow).runWith(Sink.head)
 
   "MigrationTo1_5" when {
-    "migrating app without --default-network-name set" should {
+
+    "migrating a single app" should {
+
       "basic command" in new Fixture {
         migrateSingleApp(basicCommandService) should be(basicCommandApp)
       }
@@ -76,7 +83,7 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
           recoverToExceptionIf[SerializationFailedException] {
             migrateSingleAppF(sd)
           }.map { ex =>
-            ex.getMessage should be(raml.NetworkConversionMessages.ContainerNetworkRequiresName)
+            ex.getMessage should be(MigrationFailedMissingNetworkEnvVar)
           }.futureValue
         }
       }
@@ -116,7 +123,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, host networking" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0").setOBSOLETENetwork(Mesos.ContainerInfo.DockerInfo.Network.HOST)))
@@ -125,7 +131,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, host networking, w/o ports" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0").setOBSOLETENetwork(Mesos.ContainerInfo.DockerInfo.Network.HOST))
@@ -136,7 +141,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, bridge networking" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0")
@@ -166,7 +170,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, bridge networking, w/o ports" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0")
@@ -182,7 +185,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, user networking (named)" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withDeprecatedIpAddress(withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0")
@@ -213,7 +215,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       "docker container, user networking (named), w/o ports" in new Fixture {
-        import Protos.ExtendedContainerInfo.DockerInfo
         val sd = withDeprecatedIpAddress(withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0")
@@ -229,7 +230,6 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       }
 
       behave like failsWithNetworkNameRequired("docker container, user networking (unnamed)"){ fixture =>
-        import Protos.ExtendedContainerInfo.DockerInfo
         fixture.withDeprecatedIpAddress(fixture.withContainer(
           _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
             .setImage("image0")
@@ -237,38 +237,140 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
           )), ports = Nil)
       }
 
-      "docker container, user networking (unnamed), w/o ports, w/ default network" in new Fixture(Some("defaultNetwork")) {
-        import Protos.ExtendedContainerInfo.DockerInfo
-        val sd = withDeprecatedIpAddress(withContainer(
-          _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
-            .setImage("image0")
-            .setOBSOLETENetwork(Mesos.ContainerInfo.DockerInfo.Network.USER)
-          )), ports = Nil)
+      def migrationWithFallbackNetwork(subtitle: String, f: Fixture): Unit = {
+        import f._
 
-        val expected = basicCommandApp.copy(
-          container = Some(Container.Docker(image = "image0")),
-          networks = Seq(ContainerNetwork("defaultNetwork")),
-          portDefinitions = Nil
-        )
-        migrateSingleApp(sd) should be(expected)
+        s"docker container, user networking (unnamed), w/o ports, $subtitle" in {
+          val sd = withDeprecatedIpAddress(withContainer(
+            _.setType(Mesos.ContainerInfo.Type.DOCKER).setDocker(DockerInfo.newBuilder()
+              .setImage("image0")
+              .setOBSOLETENetwork(Mesos.ContainerInfo.DockerInfo.Network.USER)
+            )), ports = Nil)
+
+          val expected = basicCommandApp.copy(
+            container = Some(Container.Docker(image = "image0")),
+            networks = Seq(ContainerNetwork("defaultNetwork")),
+            portDefinitions = Nil
+          )
+          migrateSingleApp(sd) should be(expected)
+        }
+
+        s"mesos container, IP/CT networking (unnamed), w/o ports, $subtitle" in {
+          val sd = withDeprecatedIpAddress(withContainer(_.setType(Mesos.ContainerInfo.Type.MESOS)), ports = Nil)
+          val expected = basicCommandApp.copy(
+            container = Some(Container.Mesos()),
+            networks = Seq(ContainerNetwork(name = "defaultNetwork")),
+            portDefinitions = Nil
+          )
+          migrateSingleApp(sd) should be(expected)
+        }
       }
 
-      "mesos container, IP/CT networking (unnamed), w/o ports, w/ default network" in new Fixture(Some("defaultNetwork")) {
-        val sd = withDeprecatedIpAddress(withContainer(_.setType(Mesos.ContainerInfo.Type.MESOS)), ports = Nil)
-        val expected = basicCommandApp.copy(
-          container = Some(Container.Mesos()),
-          networks = Seq(ContainerNetwork(name = "defaultNetwork")),
-          portDefinitions = Nil
-        )
-        migrateSingleApp(sd) should be(expected)
-      }
+      behave like migrationWithFallbackNetwork("w/ default network", new Fixture(
+        defaultNetworkName = Some("defaultNetwork")))
+
+      behave like migrationWithFallbackNetwork("w/ migration envvar override", new Fixture(
+        env = Map(DefaultNetworkNameForMigratedApps -> "defaultNetwork")))
+
+      behave like migrationWithFallbackNetwork("w/ migration envvar that overrides command line default", new Fixture(
+        defaultNetworkName = Some("foobar"), env = Map(DefaultNetworkNameForMigratedApps -> "defaultNetwork")))
     }
 
-    // TODO: test w/ special migration envvar for network name
-    // TODO: e2e migration test for a root w/ apps
+    "migrating a root group" should {
+      "be a noop when the root group is empty" in new Fixture {
+        val emptyRoot = createRootGroup(
+          apps = Map.empty,
+          pods = Map.empty,
+          groups = Set.empty,
+          dependencies = Set.empty,
+          version = Timestamp.zero
+        )
+
+        groupRepository.rootVersions() returns Source.empty[OffsetDateTime]
+        groupRepository.root() returns Future.successful(emptyRoot)
+        serviceDefinitionRepository.getVersions(any) returns Source.empty[Protos.ServiceDefinition]
+        groupRepository.storeRoot(any, any, any, any, any) returns Future.successful(Done)
+
+        val futureSummary = migrateGroups(serviceDefinitionRepository, groupRepository)
+        val (_, count) = futureSummary.futureValue
+        count should be(1)
+
+        verify(groupRepository).rootVersions()
+        verify(groupRepository).root()
+        verify(serviceDefinitionRepository).getVersions(Nil)
+        verify(groupRepository).storeRoot(emptyRoot, Nil, Nil, Nil, Nil)
+        noMoreInteractions(groupRepository, serviceDefinitionRepository)
+      }
+      "migrate all apps in the current root group" in new Fixture {
+        val singleAppRoot = createRootGroup(
+          apps = Map(basicCommandApp.id -> AppDefinition(id = basicCommandApp.id, versionInfo = basicCommandApp.versionInfo)),
+          pods = Map.empty,
+          groups = Set.empty,
+          dependencies = Set.empty,
+          version = Timestamp.zero
+        )
+
+        groupRepository.rootVersions() returns Source.empty[OffsetDateTime]
+        groupRepository.root() returns Future.successful(singleAppRoot)
+        serviceDefinitionRepository.getVersions(any) returns Source.single(basicCommandService)
+        groupRepository.storeRoot(any, any, any, any, any) returns Future.successful(Done)
+
+        val futureSummary = migrateGroups(serviceDefinitionRepository, groupRepository)
+        val (_, count) = futureSummary.futureValue
+        count should be(2) // root + 1 app
+
+        verify(groupRepository).rootVersions()
+        verify(groupRepository).root()
+        verify(serviceDefinitionRepository).getVersions(Seq(basicCommandApp.id -> serviceVersion.toOffsetDateTime))
+        verify(groupRepository).storeRoot(singleAppRoot, Seq(basicCommandApp), Nil, Nil, Nil)
+        noMoreInteractions(groupRepository, serviceDefinitionRepository)
+      }
+      "migrate root version, followed by current" in new Fixture {
+        val emptyRoot = createRootGroup(
+          apps = Map.empty,
+          pods = Map.empty,
+          groups = Set.empty,
+          dependencies = Set.empty,
+          version = Timestamp.zero
+        )
+        val singleAppRoot = createRootGroup(
+          apps = Map(basicCommandApp.id -> AppDefinition(id = basicCommandApp.id, versionInfo = basicCommandApp.versionInfo)),
+          pods = Map.empty,
+          groups = Set.empty,
+          dependencies = Set.empty,
+          version = Timestamp(1L)
+        )
+
+        groupRepository.rootVersions() returns Source.single(Timestamp.zero.toOffsetDateTime)
+        groupRepository.rootVersion(any) returns Future.successful(Option(emptyRoot))
+        groupRepository.root() returns Future.successful(singleAppRoot)
+
+        serviceDefinitionRepository.getVersions(Nil) returns Source.empty[Protos.ServiceDefinition]
+        val serviceVersions = Seq(basicCommandApp.id -> serviceVersion.toOffsetDateTime)
+        serviceDefinitionRepository.getVersions(serviceVersions) returns Source.single(basicCommandService)
+        groupRepository.storeRoot(any, any, any, any, any) returns Future.successful(Done)
+
+        val futureSummary = migrateGroups(serviceDefinitionRepository, groupRepository)
+        val (_, count) = futureSummary.futureValue
+        count should be(3) // versioned-root (empty) + current root + current app
+
+        verify(groupRepository).rootVersions()
+
+        verify(groupRepository).rootVersion(Timestamp.zero.toOffsetDateTime)
+        verify(serviceDefinitionRepository).getVersions(Nil)
+        verify(groupRepository).storeRoot(emptyRoot, Nil, Nil, Nil, Nil)
+
+        verify(groupRepository).root()
+        verify(serviceDefinitionRepository).getVersions(serviceVersions)
+        verify(groupRepository).storeRoot(singleAppRoot, Seq(basicCommandApp), Nil, Nil, Nil)
+
+        noMoreInteractions(groupRepository, serviceDefinitionRepository)
+      }
+    }
   }
 
-  private class Fixture(val defaultNetworkName: Option[String] = None, val enabledFeatures: Set[String] = Set.empty) {
+  private class Fixture(val defaultNetworkName: Option[String] = None, val env: Map[String, String] = Map.empty) {
+    val serviceVersion = Timestamp(1000L)
     val basicCommandService: Protos.ServiceDefinition = Protos.ServiceDefinition.newBuilder()
       .setId("/foo")
       .setCmd(Mesos.CommandInfo.newBuilder().setValue("sleep 60"))
@@ -282,7 +384,7 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
         RangesResource.ports(Seq(Range(80)))
       ).map(resourceToProto))
       .addPortDefinitions(Mesos.Port.newBuilder().setNumber(80))
-      .setVersion(Timestamp(1000L).toString)
+      .setVersion(serviceVersion.toString)
       .build
 
     val basicCommandApp: AppDefinition = AppDefinition(
@@ -291,7 +393,7 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       resources = Resources(cpus = 0.1, mem = 64, disk = 10),
       executor = "//cmd",
       portDefinitions = PortDefinitions(80),
-      versionInfo = OnlyVersion(Timestamp(1000L))
+      versionInfo = OnlyVersion(serviceVersion)
     )
 
     def withContainer(f: Protos.ExtendedContainerInfo.Builder => Protos.ExtendedContainerInfo.Builder): Protos.ServiceDefinition = {
@@ -309,7 +411,10 @@ class MigrationTo1_5Test extends AkkaUnitTest with RecoverMethods {
       sd.toBuilder.setOBSOLETEIpAddress(ipAddress).clearPortDefinitions().build
     }
 
-    lazy implicit val appNormalization: Normalization[raml.App] = AppsResource.appNormalization(
-      AppsResource.NormalizationConfig(enabledFeatures, AppNormalization.Configure(defaultNetworkName)))
+    lazy implicit val environment: Environment = Environment(env)
+    lazy implicit val appNormalization: Normalization[raml.App] = appNormalizer(Set.empty, defaultNetworkName)
+
+    val serviceDefinitionRepository = mock[ServiceDefinitionRepository]
+    val groupRepository = mock[GroupRepository]
   }
 }

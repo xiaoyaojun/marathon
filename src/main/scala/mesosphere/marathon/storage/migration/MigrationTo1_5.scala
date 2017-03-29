@@ -25,6 +25,7 @@ case class MigrationTo1_5(
 
   @SuppressWarnings(Array("all")) // async/await
   def migrate(): Future[Done] = async {
+    implicit val env = Environment(sys.env)
     implicit val appNormalization = appNormalizer(migration.availableFeatures, migration.defaultNetworkName)
     val summary = await(migrateGroups(migration.serviceDefinitionRepo, migration.groupRepository))
     logger.info(s"Migrated $summary to 1.5")
@@ -35,21 +36,25 @@ case class MigrationTo1_5(
 private[migration] object MigrationTo1_5 {
 
   val DefaultNetworkNameForMigratedApps = "MIGRATION_1_5_0_MARATHON_DEFAULT_NETWORK_NAME"
+  val MigrationFailedMissingNetworkEnvVar =
+    "failed to migrate service because no default-network-name has been configured and" +
+      s" environment variable $DefaultNetworkNameForMigratedApps is not set"
 
   case class MigratedRoot(root: RootGroup, apps: Seq[AppDefinition]) {
     def store(groupRepository: GroupRepository)(implicit ec: ExecutionContext): Future[MigratedRoot] =
       groupRepository.storeRoot(root, apps, Nil, Nil, Nil).map(_ => MigratedRoot.this)
   }
 
-  def appNormalizer(enabledFeatures: Set[String], networkName: Option[String]): Normalization[raml.App] =
+  case class Environment(vars: Map[String, String])
+
+  def appNormalizer(enabledFeatures: Set[String], networkName: Option[String])(implicit env: Environment): Normalization[raml.App] =
     // lazily evaluate the special environment variable and configured network name: we might never need them, and in
     // that case we don't want to abort migration (because there's no reason to).
     AppsResource.appNormalization(AppsResource.NormalizationConfig(
       enabledFeatures, new AppNormalization.Config {
       override def defaultNetworkName: Option[String] =
-        sys.env.get(DefaultNetworkNameForMigratedApps).orElse(networkName).orElse(throw SerializationFailedException(
-          "failed to migrate service because no default-network-name has been configured and" +
-            s" environment variable $DefaultNetworkNameForMigratedApps is not set"))
+        env.vars.get(DefaultNetworkNameForMigratedApps).orElse(networkName).orElse(throw SerializationFailedException(
+          MigrationFailedMissingNetworkEnvVar))
     }))
 
   /**
